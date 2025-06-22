@@ -1,0 +1,6 @@
+.biz
+.com
+.info
+.net
+.org
+.io
