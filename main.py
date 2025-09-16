@@ -724,7 +724,7 @@ async def start():
         procs[query] = multiprocessing.Process(
             target=crawl, args=[query, sharedresults]
         )
-        proces[query].start()
+        procs[query].start()
 
     return Response("Started")  # , headers=cors_headers)
 
