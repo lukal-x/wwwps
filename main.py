@@ -9,8 +9,8 @@ import random
 import re
 import requests
 import socket
+import subprocess
 import time
-import torch
 import typing
 import urllib.parse
 import uvicorn
@@ -47,16 +47,58 @@ cors_headers = dict(
 
 Store = typing.Literal["urls", "queries"]
 
-model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+# model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 
 @functools.lru_cache(maxsize=9999)
 def encoded(text: str):
-    return model.encode([text], convert_to_tensor=True)
+    raise DeprecationWarning("!") # return model.encode([text], convert_to_tensor=True)
+
+
+def inform(info) -> None:
+    print(info)
+    if False: # 30 > len(str(info)):
+        subprocess.run(["espeak", str(info)])
 
 
 def relative(filepath: str) -> str:
     return join(dirname(__file__), filepath)
+
+
+class F:
+
+    @staticmethod
+    def ngram(text: str, size: int = 2) -> list[str]:
+
+        grams: list[str] = [""]
+
+        for i, el in enumerate(text):
+            for j in range(i, i + size):
+                if j < len(text):
+                    grams[-1] += text[j]
+
+            grams.append("")
+
+        return grams
+
+    @staticmethod
+    def trigram(text) -> list[str]:
+        return F.ngram(text, 3)
+
+    @staticmethod
+    def similarity(a: str, b: str) -> float:
+        pattern = r"[^a-zA-Z0-9]"
+
+        left, right = map(
+            F.trigram,
+            map(functools.partial(re.sub, pattern, " "), map(str.lower, [a, b])),
+        )
+
+        total = len(left + right)
+        distinct = len(set(left + right))
+        same = total - distinct
+
+        return same / total
 
 
 @dataclass
@@ -102,7 +144,7 @@ class Walker:
     seen: deque[str]
 
     # user query
-    focus: typing.Any  # tensor
+    focus: str  # typing.Any  # tensor
 
     # how deep(!wide) should the scanning be
     depth: float = 0.3
@@ -159,7 +201,7 @@ class Walker:
             ip = ipaddress.ip_address(socket.gethostbyname(urlparse(url).netloc))
 
         if ip is None:
-            print(f"Moving on... No IP for {url}")
+            inform(f"Moving on... No IP for {url}")
             return False
 
         if any(
@@ -168,7 +210,7 @@ class Walker:
                 self.nogo_ranges,
             )
         ):
-            print(f"Moving on... {url} is in a nogo range, skipping these")
+            inform(f"Moving on... {url} is in a nogo range, skipping these")
             return False
 
         return True
@@ -177,8 +219,7 @@ class Walker:
         if (1 == random.randint(0, 5)) or (not any(self.locations)):
             tld = random.choice(self.tlds)
             word = random.choice(self.words).lower()
-            term = encoded(word)
-            distance = torch.nn.functional.cosine_similarity(self.focus, term)
+            distance = F.similarity(self.focus, word)
 
             attempts = 0
             started = time.time()
@@ -186,19 +227,18 @@ class Walker:
             while depth > float(distance):
                 attempts += 1
                 word = random.choice(self.words).lower()
-                term = encoded(word)
-                distance = torch.nn.functional.cosine_similarity(self.focus, term)
+                distance = F.similarity(self.focus, word)
 
                 if attempts > 5_000:
                     depth -= 0.0001
 
             finished = time.time()
-            print(
+            inform(
                 [
                     "Word ",
                     word,
                     " distance ",
-                    float(distance),
+                    ("%.2f" % float(distance)),
                     " attempts ",
                     attempts,
                     " seconds ",
@@ -224,14 +264,14 @@ class Walker:
             if not any(self.seen):
                 return 0.0
 
-            a = encoded(e["href"])
-            relevant = list(map(encoded, list(self.seen)[-100:]))
+            a = e["href"]
+            relevant = list(map(str, list(self.seen)[-100:]))
 
             scores = list(
                 map(
                     float,
                     map(
-                        functools.partial(torch.nn.functional.cosine_similarity, a),
+                        functools.partial(F.similarity, a),
                         relevant,
                     ),
                 )
@@ -245,7 +285,7 @@ class Walker:
 
             return avg  # * chance
 
-        print(["Choosing..."])
+        inform(["Choosing..."])
         chosen = next(
             iter(
                 sorted(
@@ -261,10 +301,10 @@ class Walker:
         )
 
         if chosen is None:
-            print(["No usable locations, depth ", depth])
+            inform(["No usable locations, depth ", depth])
             return self.location(depth - 0.1)
 
-        print(["Chose ", chosen.get("href"), chosen.get("odds")])
+        inform(["Chose ", chosen.get("href"), chosen.get("odds")])
         self.seen.append(chosen.get("href"))
 
         return chosen.get("href")
@@ -359,22 +399,22 @@ class Walker:
 
     def step(self) -> Page:
         url = self.location(self.depth)
-        print(["Runtime statistics ", self.stats.__dict__, " seen ", len(self.seen)])
-        print(["Looking at ", url])
+        inform(["Runtime statistics ", self.stats.__dict__, " seen ", len(self.seen)])
+        inform(["Looking at ", url])
         while not self.is_ok(url):
             url = self.location(self.depth)
-            print(["Looking at ", url])
+            inform(["Looking at ", url])
 
-        print(["Checking ", url])
+        inform(["Checking ", url])
         self.stats.total += 1
 
         stored_only = False
         while stored_only and not self.has_url_stored(url):
-            print(["Skipping... Found no storage for ", url])
+            inform(["Skipping... Found no storage for ", url])
             url = self.location(self.depth)
 
         if self.has_url_stored(url) and (1 != random.randint(0, 10)):
-            print(["Got storage for url", url])
+            inform(["Got storage for url", url])
             try:
                 restored = self.from_storage(url)
 
@@ -386,7 +426,7 @@ class Walker:
                     self.stats.from_storage += 1
                     return restored
             except Exception as ex:
-                print([f"Failed to read url {url} from storage", ex])
+                inform([f"Failed to read url {url} from storage", ex])
 
         loaded_ok = False
         while not loaded_ok:
@@ -394,9 +434,9 @@ class Walker:
                 self.follow(url)
                 loaded_ok = True
                 self.stats.from_web += 1
-                print(["Loaded OK: ", url])
+                inform(["Loaded OK: ", url])
             except Exception as ex:
-                print(["Failed to open ", url, " got ", ex])
+                inform(["Failed to open ", url, " got ", ex])
                 self.stats.failed += 1
                 url = self.location(self.depth)
 
@@ -437,7 +477,7 @@ class Walker:
     def read_storage(self, value: str, store: Store = "urls") -> typing.Any:
         with open(relative(self.storage_filename(value, store)), "rb") as f:
             result = json.loads(zlib.decompress(f.read()).decode("utf-8"))
-            print(["Read url", value, " from storage"])
+            inform(["Read url", value, " from storage"])
 
             return result
 
@@ -483,8 +523,8 @@ def crawl(query: str, depth: float | None = None, once: bool = False):
     message = f"""<p>Searching for "{query}"... Refresh this page to see results & progress.</p>"""
 
     if query not in queries:
-        queries[query] = model.encode([query], convert_to_tensor=True)
-        print(["Encoded query into embeddings"])
+        queries[query] = query  # model.encode([query], convert_to_tensor=True)
+        inform(["Encoded query into embeddings"])
 
     in_history = False
     if exists(relative("storage/queries.txt")):
@@ -499,17 +539,17 @@ def crawl(query: str, depth: float | None = None, once: bool = False):
 
                 in_history = True
 
-                print(["Found an exact query in engine history"])
+                inform(["Found an exact query in engine history"])
                 path = walkers[query].storage_filename(query, "queries")
                 if not exists(relative(path)):
-                    print(["Did not find in storage ", path])
+                    inform(["Did not find in storage ", path])
                     continue
 
                 for k, v in walkers[query].read_storage(line, "queries").items():
                     v["odds"] = min(0.3, v["odds"])
                     walkers[query].locations[k] = v
 
-                print(["Locations loaded ", len(walkers[query].locations)])
+                inform(["Locations loaded ", len(walkers[query].locations)])
 
             if not in_history:
                 f.seek(0)
@@ -519,18 +559,16 @@ def crawl(query: str, depth: float | None = None, once: bool = False):
                 closest = {}
                 for _line in f:  # look for closest match to load its links
                     line = _line.strip()
-                    vec = model.encode([line], convert_to_tensor=True)
+                    # vec = model.encode([line], convert_to_tensor=True)
                     similarity = round(
-                        torch.nn.functional.cosine_similarity(
-                            queries[query], vec
-                        ).item(),
+                        F.similarity(queries[query], line).item(),
                         4,
                     )
 
                     path = walkers[query].storage_filename(line, "queries")
 
                     if minimum < similarity and highest < similarity:
-                        print(
+                        inform(
                             [
                                 "Previous query ",
                                 line,
@@ -542,7 +580,7 @@ def crawl(query: str, depth: float | None = None, once: bool = False):
                         )
                         highest = similarity
                         if not exists(relative(path)):
-                            print(["Did not find in storage ", path])
+                            inform(["Did not find in storage ", path])
                             continue
 
                         for k, v in (
@@ -551,7 +589,7 @@ def crawl(query: str, depth: float | None = None, once: bool = False):
                             v["odds"] = min(0.1, v["odds"])
                             walkers[query].locations[k] = v
 
-                        print(["Locations loaded ", len(walkers[query].locations)])
+                        inform(["Locations loaded ", len(walkers[query].locations)])
 
                 if any(closest):
                     walkers[query].locations = closest
@@ -572,7 +610,7 @@ def crawl(query: str, depth: float | None = None, once: bool = False):
     )
 
     assert focus, focus
-    walkers[query].focus = encoded(focus)
+    walkers[query].focus = focus
 
     best = 0.0
 
@@ -596,30 +634,19 @@ def crawl(query: str, depth: float | None = None, once: bool = False):
                 vals = []
 
                 for fact in map(str.strip, query.split(",")):
-                    fact_tensor = encoded(fact)
-                    if fact.strip().startswith("not "):
-                        fact_tensor = torch.flip(fact_tensor, [0, 1])
+                    # fact_tensor = encoded(fact)
+                    # if fact.strip().startswith("not "):
+                    #     fact_tensor = torch.flip(fact_tensor, [0, 1])
 
-                    second = model.encode(
-                        [
-                            f"""{discovered["href"]} ({discovered["text"]}) {content[query]["page_metadata"]}"""
-                        ],
-                        convert_to_tensor=True,
-                    )
-                    vals.append(
-                        round(
-                            torch.nn.functional.cosine_similarity(
-                                fact_tensor, second
-                            ).item(),
-                            4,
-                        )
-                    )
+                    second = f"""{discovered["href"]} ({discovered["text"]}) {content[query]["page_metadata"]}"""
+                    # second = model.encode([f"""{discovered["href"]} ({discovered["text"]}) {content[query]["page_metadata"]}"""], convert_to_tensor=True)
+                    vals.append(round(F.similarity(fact, second), 4))
 
                 val = 0.0
                 if any(vals):
                     val = round(sum(vals) / len(vals), 4)
 
-                print(
+                inform(
                     ["Answer: ", val, " for ", discovered["href"], discovered["text"]]
                 )
 
@@ -637,7 +664,8 @@ def crawl(query: str, depth: float | None = None, once: bool = False):
                     map(operator.itemgetter("odds"), walkers[query].locations.values())
                 )
 
-            print(
+            inform(f"Best found so far {best}")
+            inform(
                 [
                     "Best found so far ",
                     best,
@@ -661,9 +689,9 @@ def crawl(query: str, depth: float | None = None, once: bool = False):
                 if highest_found > walkers[query].depth:
                     walkers[query].depth = highest_found  # reset depth when necessary
 
-            print(["Depth ", walkers[query].depth])
+            inform(["Depth ", walkers[query].depth])
         except Exception as ex:
-            print(["Got an error ", ex])
+            inform(["Got an error ", ex])
             break
 
         time.sleep(random.randint(0, 66))
@@ -676,11 +704,13 @@ def crawl(query: str, depth: float | None = None, once: bool = False):
         del content[query]
     #
 
-    walkers[query].depth = float(depth) if depth else 0.3  # reset depth
+    walkers[query].depth = (
+        float(depth) if isinstance(depth, int) else 0.3
+    )  # reset depth
 
-    print(["Best found so far ", best, " goal is ", round(level, 4), " query ", query])
-    print(["Depth ", walkers[query].depth])
-    print("\n--\n\n")
+    inform(["Best found so far ", best, " goal is ", round(level, 4), " query ", query])
+    inform(["Depth ", walkers[query].depth])
+    inform("\n--\n\n")
 
 
 cache_build_queries = deque([], maxlen=999)
@@ -744,7 +774,7 @@ async def build_cache():
             f.write(f"{query}\n")
 
     for i in range(0, iters):
-        print(["Iteration ", i + 1, "/", iters])
+        inform(["Iteration ", i + 1, "/", iters])
 
         # take a random previous query, if any
         query = random.choice(
@@ -778,7 +808,7 @@ async def build_cache():
                     continue
 
                 if phrase not in open(relative("storage/queries.txt")).read():
-                    print(["Phrase ", phrase])
+                    inform(["Phrase ", phrase])
                     with open(relative("storage/queries.txt"), "a") as f:
                         f.write(f"{phrase}\n")
 
