@@ -23,7 +23,7 @@ from collections import deque
 from dataclasses import dataclass
 from flask import Flask, Response, request as req
 from os.path import dirname, exists, join
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
