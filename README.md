@@ -4,6 +4,16 @@ world wide web positioning system.
 
 Uses ngrams to weigh links against a search query and crawl towards higher rating hits.
 
+## Usage
+
+The crawler - at the moment - exposes a JSON API with three endpoints, given a query "hello world" you can
+
+1. Start crawling a query: `curl -X PATCH http://localhost:1337/start?query=hello+world`
+2. Stop crawling a query: `curl -X PATCH http://localhost:1337/halt?query=hello+world`
+3. Get results for a query: `curl http://localhost:1337/search?query=hello+world`
+
+## Rationale
+
 Copied from the WWW page on [my digital garden](https://lukal.neocities.org/www.html). Text there might differ.
 
 ---
