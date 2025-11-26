@@ -1,3 +1,10 @@
+from asgiref.wsgi import WsgiToAsgi
+from bs4 import BeautifulSoup
+from contextlib import suppress
+from collections import deque
+from dataclasses import dataclass
+from flask import Flask, Response, request as req
+from os.path import dirname, exists, join
 import functools
 import hashlib
 import ipaddress
@@ -5,6 +12,7 @@ import itertools
 import json
 import multiprocessing
 import operator
+import os
 import random
 import re
 import requests
@@ -16,13 +24,6 @@ import urllib.parse
 import uvicorn
 import zlib
 
-from asgiref.wsgi import WsgiToAsgi
-from bs4 import BeautifulSoup
-from contextlib import suppress
-from collections import deque
-from dataclasses import dataclass
-from flask import Flask, Response, request as req
-from os.path import dirname, exists, join
 # from sentence_transformers import SentenceTransformer
 from types import SimpleNamespace
 from urllib.parse import urlparse
@@ -45,24 +46,27 @@ cors_headers = dict(
 )
 
 
-Store = typing.Literal["urls", "queries"]
-
 # model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 
 @functools.lru_cache(maxsize=9999)
 def encoded(text: str):
-    raise DeprecationWarning("!") # return model.encode([text], convert_to_tensor=True)
+    raise DeprecationWarning("!")  # return model.encode([text], convert_to_tensor=True)
 
 
 def inform(info) -> None:
     print(info)
-    if False: # 30 > len(str(info)):
+    if False:  # 30 > len(str(info)):
         subprocess.run(["espeak", str(info)])
 
 
 def relative(filepath: str) -> str:
     return join(dirname(__file__), filepath)
+
+
+Store = typing.Literal["urls", "queries"]
+os.makedirs(relative(f"storage/urls"), exist_ok=True)
+os.makedirs(relative(f"storage/queries"), exist_ok=True)
 
 
 class F:
@@ -561,7 +565,7 @@ def crawl(query: str, depth: float | None = None, once: bool = False):
                     line = _line.strip()
                     # vec = model.encode([line], convert_to_tensor=True)
                     similarity = round(
-                        F.similarity(queries[query], line).item(),
+                        F.similarity(queries[query], line),
                         4,
                     )
 
