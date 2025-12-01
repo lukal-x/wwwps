@@ -22,10 +22,11 @@ So the starting assumption here is that the internet is perfectly fine and that 
 
 The user interface for a world wide web positioning system? A plaintext messageboard.
 
-This is an example of [immortal software](index.html#immortal%3F) - any moderately skilled programmer on the planet can easily build the following two things in a relatively short amount of time:
+This is an example of [immortal software](index.html#immortal%3F) - any moderately skilled programmer on the planet can easily build the following ~~two~~ three things in a relatively short amount of time:
 
-- a rudimentary messageboard with enumerated posts, 1 level replies, quoting, and pagination
-- a respectful crawler (waits for 10-30 seconds between each HTTP request) bundled together with a list of like top 1000 most common words and top 5-10 TLDs for starting points, an ngram (trigram) similarity comparison, and a gradually decreasing threshold for next most similar page to look at.
+1. a rudimentary messageboard with enumerated posts, 1 level replies, quoting, and pagination
+2. a respectful crawler (waits for 10-30 seconds between each HTTP request) bundled together with a list of like top 1000 most common words and top 5-10 TLDs for starting points, an ngram (trigram) similarity comparison, and a gradually decreasing threshold for next most similar page to look at.
+3. a broker with an (HTTP?) API for POST to /messages and GET /message and a FIFO CSV storage to act as an intermediary between the messageboard and however many crawler processes are needed
 
 So you can make a post on the messageboard like
 
